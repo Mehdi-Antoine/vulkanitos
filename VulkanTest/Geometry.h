@@ -28,8 +28,11 @@ struct TrackBallCamera
 struct Vertex
 {
     glm::vec3 pos;
+    float a;
     glm::vec3 color;
+    float b;
     glm::vec2 texCoord;
+    glm::vec2 c;
 
     bool operator==(const Vertex& other) const;
 };

@@ -18,14 +18,14 @@ protected:
     void cleanup() override;
 
 protected:
-    const int MAX_FRAMES_IN_FLIGHT = 2;
+    const int MAX_FRAMES_IN_FLIGHT = 1;
 
     const std::vector<const char*> validationLayers = {
         "VK_LAYER_LUNARG_standard_validation",
     };
 
-#ifdef NDEBUG
-// #if 0
+// #ifdef NDEBUG
+#if 0
     const bool enableValidationLayers = false;
     const VkDebugReportFlagsEXT debugFlags = 0;
 
@@ -49,9 +49,12 @@ protected:
     {
         int graphicsFamily = -1;
         int presentFamily = -1;
+        int computeFamily = -1;
         bool isComplete()
         {
-            return graphicsFamily >= 0 && presentFamily >= 0;
+            return graphicsFamily >= 0 
+                && presentFamily >= 0
+                && computeFamily >= 0;
         }
     };
 
@@ -66,11 +69,19 @@ protected:
         std::vector<VkPresentModeKHR> presentModes;
     };
 
+    struct ComputeData
+    {
+        float time;
+        int vertexCount;
+    };
+
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 
     VkDevice device;
 
     VkQueue graphicsQueue;
+
+    VkQueue computeQueue;
 
     VkQueue presentQueue;
 
@@ -89,18 +100,31 @@ protected:
 
     VkRenderPass renderPass = VK_NULL_HANDLE;
 
-    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorSetLayout graphicsDescriptorSetLayout;
+    VkPipelineLayout graphicsPipelineLayout;
+    VkPipeline graphicsPipeline;
 
-    VkPipelineLayout pipelineLayout;
-    VkPipelineLayout graphicsPipeline;
+    VkDescriptorSetLayout luminanceDescriptorSetLayout;
+    VkPipelineLayout luminancePipelineLayout;
+    VkPipeline luminancePipeline;
+
+    VkDescriptorSetLayout computeDescriptorSetLayout;
+    VkPipelineLayout computePipelineLayout;
+    VkPipeline computePipeline;
 
     std::vector<VkFramebuffer> swapChainFramebuffers;
 
-    VkCommandPool commandPool;
+    VkCommandPool graphicsCommandPool;
+
+    VkCommandPool computeCommandPool;
 
     VkImage depthImage;
     VkDeviceMemory depthImageMemory;
     VkImageView depthImageView;
+
+    VkImage beautyImage;
+    VkDeviceMemory beautyImageMemory;
+    VkImageView beautyImageView;
 
     uint32_t mipLevels;
     VkImage textureImage;
@@ -113,21 +137,33 @@ protected:
     VkBuffer vertexBuffer;
     VkDeviceMemory vertexBufferMemory;
 
+    VkBuffer quadBuffer;
+    VkDeviceMemory quadBufferMemory;
+
     VkBuffer indexBuffer;
     VkDeviceMemory indexBufferMemory;
 
-    std::vector<VkBuffer> uniformBuffers;
-    std::vector<VkDeviceMemory> uniformBufferMemories;
+    std::vector<VkBuffer> graphicsUniformBuffers;
+    std::vector<VkDeviceMemory> graphicsUniformBufferMemories;
+
+    std::vector<VkBuffer> computeUniformBuffers;
+    std::vector<VkDeviceMemory> computeUniformBufferMemories;
 
     VkDescriptorPool descriptorPool;
 
-    std::vector<VkDescriptorSet> descriptorSets;
+    std::vector<VkDescriptorSet> graphicsDescriptorSets;
+    std::vector<VkDescriptorSet> luminanceDescriptorSets;
+    std::vector<VkDescriptorSet> computeDescriptorSets;
 
-    std::vector<VkCommandBuffer> commandBuffers;
+    std::vector<VkCommandBuffer> graphicsCommandBuffers;
+
+    std::vector<VkCommandBuffer> computeCommandBuffers;
 
     std::vector<VkSemaphore> imageAvailableSemaphores;
     std::vector<VkSemaphore> renderFinishedSemaphores;
     std::vector<VkFence> inFlightFences;
+
+    VkFence computeFence;
 
     size_t currentFrame = 0;
 protected:
@@ -178,13 +214,21 @@ protected:
 
     VkShaderModule createShaderModule(const std::vector<char>& code);
 
-    void createDescriptorSetLayout();
+    void createGraphicsDescriptorSetLayout();
+
+    void createLuminanceDescriptorSetLayout();
+
+    void createComputeDescriptorSetLayout();
 
     void createGraphicsPipeline();
 
+    void createLuminancePipeline();
+
+    void createComputePipeline();
+
     void createFramebuffers();
 
-    void createCommandPool();
+    void createCommandPools();
 
     VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
 
@@ -194,21 +238,23 @@ protected:
 
     void createDepthResources();
 
+    void createBeautyResources();
+
     void createImage(uint32_t width,
-                                        uint32_t height,
-                                        uint32_t mipLevels,
-                                        VkFormat format,
-                                        VkImageTiling tiling,
-                                        VkImageUsageFlags usage,
-                                        VkMemoryPropertyFlags properties,
-                                        VkImage* image,
-                                        VkDeviceMemory* imageMemory);
+                     uint32_t height,
+                     uint32_t mipLevels,
+                     VkFormat format,
+                     VkImageTiling tiling,
+                     VkImageUsageFlags usage,
+                     VkMemoryPropertyFlags properties,
+                     VkImage* image,
+                     VkDeviceMemory* imageMemory);
 
     void transitionImageLayout(VkImage image,
-                                                  VkFormat format,
-                                                  VkImageLayout oldLayout,
-                                                  VkImageLayout newLayout,
-                                                  uint32_t mipLevels);
+                               VkFormat format,
+                               VkImageLayout oldLayout,
+                               VkImageLayout newLayout,
+                               uint32_t mipLevels);
 
     void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
 
@@ -225,10 +271,10 @@ protected:
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
     void createBuffer(VkDeviceSize size, 
-                                         VkBufferUsageFlags usage, 
-                                         VkMemoryPropertyFlags properties, 
-                                         VkBuffer* buffer, 
-                                         VkDeviceMemory* bufferMemory);
+                      VkBufferUsageFlags usage, 
+                      VkMemoryPropertyFlags properties, 
+                      VkBuffer* buffer, 
+                      VkDeviceMemory* bufferMemory);
 
     VkCommandBuffer beginSingleTimeCommands();
 
@@ -238,13 +284,29 @@ protected:
 
     void createVertexBuffer();
 
+    void createQuadBuffer();
+
     void createIndexBuffer();
 
-    void createUniformBuffer();
+    void createUniformBuffers();
 
     void createDescriptorPool();
 
-    void createDescriptorSets();
+    void updateGraphicsDescriptorSets();
+
+    void createGraphicsDescriptorSets();
+
+    void updateLuminanceDescriptorSets();
+
+    void createLuminanceDescriptorSets();
+
+    void updateComputeDescriptorSets();
+
+    void createComputeDescriptorSets();
+
+    void fillGraphicsCommandBuffers();
+
+    void fillComputeCommandBuffers();
 
     void createCommandBuffers();
 
@@ -254,14 +316,16 @@ protected:
 
     void recreateSwapChain();
 
-    void updateUniformBuffer(size_t imageIndex);
+    void updateUniformBuffers(size_t imageIndex);
 
     void drawFrame();
 };
 
 VkVertexInputBindingDescription getVertexBindingDescription();
-
 std::array<VkVertexInputAttributeDescription, 3> getVertexAttributeDescriptions();
+
+VkVertexInputBindingDescription getQuadBindingDescription();
+VkVertexInputAttributeDescription getQuadAttributeDescription();
 
 VkResult CreateDebugReportCallbackEXT(VkInstance instance,
                                       const VkDebugReportCallbackCreateInfoEXT* pCreateInfo,
